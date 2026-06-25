@@ -60,8 +60,8 @@ class Userbot(Client):
                 
                 # Try to join support chats
                 try:
-                    await self.one.join_chat("ShrutiBots")
-                    await self.one.join_chat("ShrutiSupportChat")
+                    await self.one.join_chat("messo_network")
+                    await self.one.join_chat("messo_network")
                     LOGGER(__name__).info("Assistant 1 joined support chats")
                 except Exception as e:
                     LOGGER(__name__).warning(f"Assistant 1 failed to join support chats: {e}")
