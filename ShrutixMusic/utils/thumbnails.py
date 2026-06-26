@@ -116,9 +116,9 @@ async def get_thumb(videoid):
                 return ImageFont.truetype(path, size)
             except:
                 return ImageFont.load_default()
-        font = safe_font("AviaxMusic/assets/font.ttf", 30)
-        font2 = safe_font("AviaxMusic/assets/font.ttf", 30)
-        arial = safe_font("AviaxMusic/assets/font2.ttf", 30)
+        font = safe_font("ShrutixMusic/assets/font.ttf", 30)
+        font2 = safe_font("ShrutixMusic/assets/font.ttf", 30)
+        arial = safe_font("ShrutixMusic/assets/font2.ttf", 30)
         # Draw text
         draw = ImageDraw.Draw(background)
         # Channel | Views
@@ -133,7 +133,7 @@ async def get_thumb(videoid):
         draw.line((150, 660, 1130, 660), width=6, fill=bar_color)
         # Recreation Music text at right side of center thumbnail
         rec_font = safe_font("OpusV/resources/font.ttf", 40)
-        rec_text = "QUEEN X MUSIC"
+        rec_text = "Anjali Music"
         bbox = draw.textbbox((0, 0), rec_text, font=rec_font)
         rec_text_w = bbox[2] - bbox[0]
         rec_text_h = bbox[3] - bbox[1]
