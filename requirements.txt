@@ -9,6 +9,7 @@ hachoir
 heroku3
 httpx[http2]
 motor
+numpy
 pillow
 psutil
 py-tgcalls==0.9.7
