@@ -14,6 +14,7 @@ psutil
 py-tgcalls==0.9.7
 pykeyboard
 pyrofork
+https://github.com/KurimuzonAkuma/kurigram/archive/dev.zip
 python-dotenv
 pyyaml
 requests
