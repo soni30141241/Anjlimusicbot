@@ -1,12 +1,12 @@
 import asyncio
 import os
 import re
-import urllib.parse
 from typing import Union
-
-import httpx
+import yt_dlp
 from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
+from py_yt import VideosSearch, Playlist
+import aiohttp
 
 from ShrutixMusic import LOGGER
 
