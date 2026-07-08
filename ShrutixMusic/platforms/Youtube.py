@@ -1,7 +1,3 @@
-# POWDERED BY PANDA-BABY
-# SUPPORT @SXYPNDU
-
-
 import asyncio
 import os
 import re
@@ -12,8 +8,10 @@ from pyrogram.types import Message
 from py_yt import VideosSearch, Playlist
 import aiohttp
 
-API_URL = os.environ.get("SHRUTI_API_URL", "https://web-production-6415.up.railway.app")
-API_KEY = os.environ.get("SHRUTI_API_KEY", "YUKI-nFnNxVkkuCOQde2rw3QbDkME") #GENERATE API KEY FROM @ARUYTAPI_BOT
+API_URL = os.environ.get("SHRUTI_API_URL", "https://api.shrutibots.site")
+
+API_KEY = os.environ.get("SHRUTI_API_KEY", "ShrutiBotskMNwxFfrMcqzjRAQRAy7") ## Get This API KEY FROM TELEGRAM BOT USERNAME: @SHRUTIAPIBOT 
+
 DOWNLOAD_DIR = "downloads"
 
 
@@ -219,65 +217,26 @@ class YouTubeAPI:
             link = self.base + link
         if "&" in link:
             link = link.split("&")[0]
-
-        try:
-            video_id = link.split("v=")[-1].split("&")[0] if "v=" in link else link
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{API_URL}/formats",
-                    params={"url": video_id, "api_key": API_KEY},
-                    timeout=aiohttp.ClientTimeout(total=30),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        formats_available = data.get("formats", [])
-                        if formats_available:
-                            for fmt in formats_available:
-                                fmt["yturl"] = link
-                            return formats_available, link
-        except Exception:
-            pass
-
-        loop = asyncio.get_event_loop()
-
-        def _extract():
-            ytdl_opts = {
-                "quiet": True,
-                "no_warnings": True,
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["android"],
-                    }
-                },
-                "http_headers": {
-                    "User-Agent": (
-                        "com.google.android.youtube/17.31.35 "
-                        "(Linux; U; Android 11) gzip"
-                    ),
-                },
-            }
-            ydl = yt_dlp.YoutubeDL(ytdl_opts)
-            with ydl:
-                formats_available = []
-                r = ydl.extract_info(link, download=False)
-                for fmt in r.get("formats", []):
-                    try:
-                        if "dash" not in str(fmt.get("format", "")).lower():
-                            formats_available.append(
-                                {
-                                    "format": fmt["format"],
-                                    "filesize": fmt.get("filesize"),
-                                    "format_id": fmt["format_id"],
-                                    "ext": fmt["ext"],
-                                    "format_note": fmt.get("format_note", ""),
-                                    "yturl": link,
-                                }
-                            )
-                    except Exception:
-                        continue
-            return formats_available
-
-        formats_available = await loop.run_in_executor(None, _extract)
+        ytdl_opts = {"quiet": True}
+        ydl = yt_dlp.YoutubeDL(ytdl_opts)
+        with ydl:
+            formats_available = []
+            r = ydl.extract_info(link, download=False)
+            for format in r["formats"]:
+                try:
+                    if "dash" not in str(format["format"]).lower():
+                        formats_available.append(
+                            {
+                                "format": format["format"],
+                                "filesize": format.get("filesize"),
+                                "format_id": format["format_id"],
+                                "ext": format["ext"],
+                                "format_note": format["format_note"],
+                                "yturl": link,
+                            }
+                        )
+                except Exception:
+                    continue
         return formats_available, link
 
     async def slider(self, link: str, query_type: int, videoid: Union[bool, str] = None):
@@ -316,3 +275,6 @@ class YouTubeAPI:
             return None, False
         except Exception:
             return None, False
+
+
+YouTube = YouTubeAPI()
