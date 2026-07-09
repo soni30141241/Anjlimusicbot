@@ -3,15 +3,13 @@ import os
 import re
 from typing import Union
 import yt_dlp
+import httpx
 from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
 from py_yt import VideosSearch, Playlist
-import aiohttp
 
-API_URL = os.environ.get("SHRUTI_API_URL", "https://api.shrutibots.site")
-
-API_KEY = os.environ.get("SHRUTI_API_KEY", "ShrutiBotskMNwxFfrMcqzjRAQRAy7") ## Get This API KEY FROM TELEGRAM BOT USERNAME: @SHRUTIAPIBOT 
-
+API_URL = os.getenv("API_URL", "https://web.riteshyt.in").rstrip("/")
+API_KEY = os.getenv("API_KEY", "ritesh_free_5fb3ae9e620c07151e0d520d")
 DOWNLOAD_DIR = "downloads"
 
 
@@ -31,16 +29,16 @@ async def download_song(link: str) -> str:
         return file_path
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{API_URL}/download",
-                params={"url": video_id, "type": "audio", "api_key": API_KEY},
-                timeout=aiohttp.ClientTimeout(total=300)
-            ) as resp:
-                if resp.status != 200:
+        async with httpx.AsyncClient(timeout=300) as client:
+            params = {"query": video_id, "dl_type": "audio"}
+            if API_KEY:
+                params["api_key"] = API_KEY
+
+            async with client.stream("GET", f"{API_URL}/download", params=params) as resp:
+                if resp.status_code != 200:
                     return None
                 with open(file_path, "wb") as f:
-                    async for chunk in resp.content.iter_chunked(131072):
+                    async for chunk in resp.aiter_bytes(131072):
                         f.write(chunk)
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             return file_path
@@ -65,16 +63,16 @@ async def download_video(link: str) -> str:
         return file_path
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{API_URL}/download",
-                params={"url": video_id, "type": "video", "api_key": API_KEY},
-                timeout=aiohttp.ClientTimeout(total=600)
-            ) as resp:
-                if resp.status != 200:
+        async with httpx.AsyncClient(timeout=600) as client:
+            params = {"query": video_id, "dl_type": "video"}
+            if API_KEY:
+                params["api_key"] = API_KEY
+
+            async with client.stream("GET", f"{API_URL}/download", params=params) as resp:
+                if resp.status_code != 200:
                     return None
                 with open(file_path, "wb") as f:
-                    async for chunk in resp.content.iter_chunked(131072):
+                    async for chunk in resp.aiter_bytes(131072):
                         f.write(chunk)
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             return file_path
@@ -177,10 +175,13 @@ class YouTubeAPI:
         if "&" in link:
             link = link.split("&")[0]
         try:
-            plist = await Playlist.get(link)
+            plist = Playlist(link)
+            while plist.hasMoreVideos and len(plist.videos) < limit:
+                await plist.getNextVideos()
+            videos = plist.videos
         except Exception:
             return []
-        videos = plist.get("videos") or []
+
         ids = []
         for data in videos[:limit]:
             if not data:
@@ -217,11 +218,16 @@ class YouTubeAPI:
             link = self.base + link
         if "&" in link:
             link = link.split("&")[0]
-        ytdl_opts = {"quiet": True}
-        ydl = yt_dlp.YoutubeDL(ytdl_opts)
-        with ydl:
+
+        def _extract():
+            ytdl_opts = {"quiet": True}
+            ydl = yt_dlp.YoutubeDL(ytdl_opts)
+            with ydl:
+                return ydl.extract_info(link, download=False)
+
+        try:
+            r = await asyncio.to_thread(_extract)
             formats_available = []
-            r = ydl.extract_info(link, download=False)
             for format in r["formats"]:
                 try:
                     if "dash" not in str(format["format"]).lower():
@@ -237,7 +243,9 @@ class YouTubeAPI:
                         )
                 except Exception:
                     continue
-        return formats_available, link
+            return formats_available, link
+        except Exception:
+            return [], link
 
     async def slider(self, link: str, query_type: int, videoid: Union[bool, str] = None):
         if videoid:
@@ -262,11 +270,11 @@ class YouTubeAPI:
         songvideo: Union[bool, str] = None,
         format_id: Union[bool, str] = None,
         title: Union[bool, str] = None,
-    ) -> str:
+    ) -> tuple:
         if videoid:
             link = self.base + link
         try:
-            if video:
+            if video or songvideo:
                 downloaded_file = await download_video(link)
             else:
                 downloaded_file = await download_song(link)
@@ -278,3 +286,4 @@ class YouTubeAPI:
 
 
 YouTube = YouTubeAPI()
+    
