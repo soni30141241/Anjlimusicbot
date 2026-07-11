@@ -113,20 +113,6 @@ async def check_file_size(link):
     return total_size
 
 
-async def shell_cmd(cmd):
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    out, errorz = await proc.communicate()
-    if errorz:
-        if "unavailable videos are hidden" in (errorz.decode("utf-8")).lower():
-            return out.decode("utf-8")
-        else:
-            return errorz.decode("utf-8")
-    return out.decode("utf-8")
-
 
 # --- Utility Functions ---
 
@@ -347,38 +333,28 @@ class YouTubeAPI:
         except Exception as e:
             return 0, str(e)
 
-    async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
-        if videoid:
-            link = self.listbase + link
-        link = self._clean_link(link)
-        
-        # API first
-        if API_URL:
-            client = await self.get_client()
-            params = {"link": link, "limit": limit}
-            if API_KEY:
-                params["api_key"] = API_KEY
-            try:
-                response = await client.get(f"{API_URL}/playlist", params=params)
-                if response.status_code == 200:
-                    data = response.json()
-                    videos = data.get("videos", [])
-                    return [v.get("vidid") for v in videos if v.get("vidid")]
-            except Exception as e:
-                logging.warning(f"Error fetching playlist from API: {e}")
-        
-        # Fallback to local shell_cmd
+async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
+    if videoid:
+        link = self.listbase + link
+    link = self._clean_link(link)
+    
+    # API Call
+    if API_URL:
+        client = await self.get_client()
+        params = {"link": link, "limit": limit}
+        if API_KEY:
+            params["api_key"] = API_KEY
         try:
-            cookies = cookie_txt_file()
-            playlist_out = await shell_cmd(
-                f"yt-dlp -i --get-id --flat-playlist --cookies {cookies} --playlist-end {limit} --skip-download {link}"
-            )
-            result = playlist_out.split("\n")
-            result = [k for k in result if k != ""]
-            return result
+            response = await client.get(f"{API_URL}/playlist", params=params)
+            if response.status_code == 200:
+                data = response.json()
+                videos = data.get("videos", [])
+                return [v.get("vidid") for v in videos if v.get("vidid")]
         except Exception as e:
-            logging.warning(f"Local playlist fallback failed: {e}")
-        return []
+            logging.warning(f"Error fetching playlist from API: {e}")
+            
+    return []
+
 
     async def track(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
