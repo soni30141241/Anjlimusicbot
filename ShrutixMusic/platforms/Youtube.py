@@ -18,8 +18,8 @@ import httpx
 import yt_dlp
 
 # --- Environment Configuration ---
-API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
-API_KEY = os.getenv("API_KEY", "")
+API_URL = os.getenv("API_URL", "http://yt.riteshyt.in").rstrip("/")
+API_KEY = os.getenv("API_KEY", "ritesh_free_de1c6a154710607cd149a5e8")
 
 # --- Dynamic Compatibility / Fallbacks for Environment Safety ---
 try:
