@@ -333,13 +333,11 @@ class YouTubeAPI:
         except Exception as e:
             return 0, str(e)
 
-async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
-    if videoid:
-        link = self.listbase + link
-    link = self._clean_link(link)
-    
-    # API Call
-    if API_URL:
+    async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
+        if videoid:
+            link = self.listbase + link
+        link = self._clean_link(link)
+
         client = await self.get_client()
         params = {"link": link, "limit": limit}
         if API_KEY:
@@ -348,12 +346,13 @@ async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None)
             response = await client.get(f"{API_URL}/playlist", params=params)
             if response.status_code == 200:
                 data = response.json()
-                videos = data.get("videos", [])
-                return [v.get("vidid") for v in videos if v.get("vidid")]
+                return data.get("videos")
+            else:
+                LOGGER(__name__).error(f"API Playlist Error ({response.status_code}): {response.text}")
         except Exception as e:
-            logging.warning(f"Error fetching playlist from API: {e}")
-            
-    return []
+            LOGGER(__name__).error(f"Error fetching playlist from API: {e}")
+        return None
+
 
 
     async def track(self, link: str, videoid: Union[bool, str] = None):
