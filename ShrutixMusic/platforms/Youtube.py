@@ -17,7 +17,7 @@ from typing import Union
 import httpx
 import yt_dlp
 
-# --- Environment Configuration ---
+# Use environment variables for configuration
 API_URL = os.getenv("API_URL", "http://yt.riteshyt.in").rstrip("/")
 API_KEY = os.getenv("API_KEY", "ritesh_free_de1c6a154710607cd149a5e8")
 
@@ -130,19 +130,6 @@ async def shell_cmd(cmd):
 
 # --- Utility Functions ---
 
-def clean_link(link: str) -> str:
-    if not link:
-        return ""
-    link = str(link)
-    if "&" in link:
-        link = link.split("&")[0]
-    if "?si=" in link:
-        link = link.split("?si=")[0]
-    elif "&si=" in link:
-        link = link.split("&si=")[0]
-    return link
-
-
 def extract_vidid(query: str) -> str:
     if not query:
         return None
@@ -164,24 +151,6 @@ async def download_assistant(query: str, dl_type: str) -> str:
     return url
 
 
-async def _api_get(endpoint: str, params: dict = None, timeout: float = 30.0) -> Union[dict, list, None]:
-    if not API_URL:
-        return None
-    url = f"{API_URL}/{endpoint.lstrip('/')}"
-    if params is None:
-        params = {}
-    if API_KEY:
-        params["api_key"] = API_KEY
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.get(url, params=params)
-            if response.status_code == 200:
-                return response.json()
-    except Exception as e:
-        logging.warning(f"API call to {endpoint} failed: {e}")
-    return None
-
-
 class YouTubeAPI:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
@@ -190,6 +159,12 @@ class YouTubeAPI:
         self.status = "https://www.youtube.com/oembed?url="
         self.listbase = "https://youtube.com/playlist?list="
         self.reg = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        self._client = None
+
+    async def get_client(self):
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0))
+        return self._client
 
     async def exists(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
@@ -212,20 +187,49 @@ class YouTubeAPI:
                         return entity.url
         return None
 
+    def _clean_link(self, link: str):
+        if not link:
+            return ""
+        link = str(link)
+        if "&" in link:
+            link = link.split("&")[0]
+        if "?si=" in link:
+            link = link.split("?si=")[0]
+        elif "&si=" in link:
+            link = link.split("&si=")[0]
+        return link
+
+    async def _fetch_details(self, link: str):
+        link = self._clean_link(link)
+        client = await self.get_client()
+        params = {"link": link}
+        if API_KEY:
+            params["api_key"] = API_KEY
+        try:
+            response = await client.get(f"{API_URL}/details", params=params)
+            if response.status_code == 200:
+                return response.json()
+        except Exception as e:
+            logging.warning(f"Error fetching details from API: {e}")
+        return None
+
     async def details(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
         # API first
-        data = await _api_get("details", {"link": link})
-        if data:
-            return (
-                data.get("title"),
-                data.get("duration_min"),
-                data.get("duration_sec", 0),
-                data.get("thumbnail"),
-                data.get("vidid")
-            )
+        if API_URL:
+            data = await self._fetch_details(link)
+            if data:
+                return (
+                    data.get("title"),
+                    data.get("duration_min"),
+                    data.get("duration_sec", 0),
+                    data.get("thumbnail"),
+                    data.get("vidid")
+                )
+        
         # Fallback to local
         if VideosSearch:
             try:
@@ -246,11 +250,14 @@ class YouTubeAPI:
     async def title(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
         # API first
-        data = await _api_get("details", {"link": link})
-        if data and data.get("title"):
-            return data["title"]
+        if API_URL:
+            data = await self._fetch_details(link)
+            if data and data.get("title"):
+                return data["title"]
+        
         # Fallback to local
         if VideosSearch:
             try:
@@ -265,11 +272,14 @@ class YouTubeAPI:
     async def duration(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
         # API first
-        data = await _api_get("details", {"link": link})
-        if data and data.get("duration_min"):
-            return data["duration_min"]
+        if API_URL:
+            data = await self._fetch_details(link)
+            if data and data.get("duration_min"):
+                return data["duration_min"]
+        
         # Fallback to local
         if VideosSearch:
             try:
@@ -284,11 +294,14 @@ class YouTubeAPI:
     async def thumbnail(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
         # API first
-        data = await _api_get("details", {"link": link})
-        if data and data.get("thumbnail"):
-            return data["thumbnail"]
+        if API_URL:
+            data = await self._fetch_details(link)
+            if data and data.get("thumbnail"):
+                return data["thumbnail"]
+        
         # Fallback to local
         if VideosSearch:
             try:
@@ -303,18 +316,19 @@ class YouTubeAPI:
     async def video(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
-        # API first: construct API streaming URL
+        link = self._clean_link(link)
+        
+        # Download video locally from API (safe against NoAudioSourceFound)
         try:
-            vidid_extracted = extract_vidid(link) or link
-            if API_URL:
-                if API_KEY:
-                    stream_url = f"{API_URL}/downloads/{API_KEY}/youtube.com/{vidid_extracted}.mp4"
-                else:
-                    stream_url = f"{API_URL}/downloads/youtube.com/{vidid_extracted}.mp4"
-                return 1, stream_url
+            video_id = extract_vidid(link) or link
+            fpath = f"downloads/{video_id}.mp4"
+            
+            # Use download method to download locally
+            res = await self.download(link, None, video=True)
+            if res and isinstance(res, tuple) and res[0]:
+                return 1, res[0]
         except Exception as e:
-            logging.warning(f"Constructing API video url failed: {e}")
+            logging.warning(f"Downloading API video locally failed: {e}")
         
         # Fallback to local yt-dlp -g
         try:
@@ -336,12 +350,22 @@ class YouTubeAPI:
     async def playlist(self, link, limit, user_id, videoid: Union[bool, str] = None):
         if videoid:
             link = self.listbase + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
         # API first
-        data = await _api_get("playlist", {"link": link, "limit": limit})
-        if data and isinstance(data, dict) and "videos" in data:
-            videos = data["videos"]
-            return [v.get("vidid") for v in videos if v.get("vidid")]
+        if API_URL:
+            client = await self.get_client()
+            params = {"link": link, "limit": limit}
+            if API_KEY:
+                params["api_key"] = API_KEY
+            try:
+                response = await client.get(f"{API_URL}/playlist", params=params)
+                if response.status_code == 200:
+                    data = response.json()
+                    videos = data.get("videos", [])
+                    return [v.get("vidid") for v in videos if v.get("vidid")]
+            except Exception as e:
+                logging.warning(f"Error fetching playlist from API: {e}")
         
         # Fallback to local shell_cmd
         try:
@@ -359,18 +383,20 @@ class YouTubeAPI:
     async def track(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
         # API first
-        data = await _api_get("details", {"link": link})
-        if data:
-            track_details = {
-                "title": data.get("title"),
-                "link": data.get("link"),
-                "vidid": data.get("vidid"),
-                "duration_min": data.get("duration_min"),
-                "thumb": data.get("thumbnail"),
-            }
-            return track_details, data.get("vidid")
+        if API_URL:
+            data = await self._fetch_details(link)
+            if data:
+                track_details = {
+                    "title": data.get("title"),
+                    "link": data.get("link"),
+                    "vidid": data.get("vidid"),
+                    "duration_min": data.get("duration_min"),
+                    "thumb": data.get("thumbnail"),
+                }
+                return track_details, data.get("vidid")
         
         # Fallback to local
         if VideosSearch:
@@ -394,7 +420,25 @@ class YouTubeAPI:
     async def formats(self, link: str, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
+        # API first
+        if API_URL:
+            client = await self.get_client()
+            params = {"link": link}
+            if API_KEY:
+                params["api_key"] = API_KEY
+            try:
+                response = await client.get(f"{API_URL}/formats", params=params)
+                if response.status_code == 200:
+                    data = response.json()
+                    formats = data.get("formats", [])
+                    for f in formats:
+                        f["yturl"] = link
+                    return formats, link
+            except Exception as e:
+                logging.warning(f"Error fetching formats from API: {e}")
+
         # Local formats extraction
         def _extract():
             ytdl_opts = {"quiet": True}
@@ -432,18 +476,28 @@ class YouTubeAPI:
     async def slider(self, link: str, query_type: int, videoid: Union[bool, str] = None):
         if videoid:
             link = self.base + link
-        link = clean_link(link)
+        link = self._clean_link(link)
+        
         # API first
-        data = await _api_get("search", {"query": link, "limit": 10})
-        if data and isinstance(data, dict) and "result" in data:
-            result = data["result"]
-            if result and len(result) > query_type:
-                target = result[query_type]
-                title = target["title"]
-                duration_min = target["duration"]
-                vidid = target["id"]
-                thumbnail = target["thumbnails"][0]["url"].split("?")[0] if target.get("thumbnails") else None
-                return title, duration_min, thumbnail, vidid
+        if API_URL:
+            client = await self.get_client()
+            params = {"query": link, "limit": 10}
+            if API_KEY:
+                params["api_key"] = API_KEY
+            try:
+                response = await client.get(f"{API_URL}/search", params=params)
+                if response.status_code == 200:
+                    result_data = response.json()
+                    result = result_data.get("result", [])
+                    if result and len(result) > query_type:
+                        target = result[query_type]
+                        title = target["title"]
+                        duration_min = target["duration"]
+                        vidid = target["id"]
+                        thumbnail = target["thumbnails"][0]["url"].split("?")[0] if target.get("thumbnails") else None
+                        return title, duration_min, thumbnail, vidid
+            except Exception as e:
+                logging.warning(f"Error in slider/search from API: {e}")
         
         # Fallback to local VideosSearch
         if VideosSearch:
@@ -466,7 +520,7 @@ class YouTubeAPI:
         if not API_URL:
             return False
         dl_type = "video" if video else "audio"
-        link = clean_link(link)
+        link = self._clean_link(link)
 
         # Avoid redundant prefetches within 30 seconds
         now = time.time()
@@ -483,31 +537,31 @@ class YouTubeAPI:
         if len(self._recent_prefetches) > 100:
             self._recent_prefetches = {k: v for k, v in self._recent_prefetches.items() if now - v < 300}
 
+        client = await self.get_client()
         params = {"query": link, "dl_type": dl_type, "prefetch": "true"}
         if API_KEY:
             params["api_key"] = API_KEY
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                await client.get(f"{API_URL}/download", params=params)
-                return True
+            await client.get(f"{API_URL}/download", params=params)
+            return True
         except Exception as e:
             logging.warning(f"Prefetch failed for {link}: {e}")
         return False
 
-    async def prefetch_queue(self, queries: list, video: bool = False):
+async def prefetch_queue(self, queries: list, video: bool = False):
         """Triggers bulk background pre-fetching on the API for a queue"""
         if not API_URL or not queries:
             return False
         dl_type = "video" if video else "audio"
+        client = await self.get_client()
         payload = {"queries": queries, "dl_type": dl_type}
         params = {}
         if API_KEY:
             params["api_key"] = API_KEY
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                await client.post(f"{API_URL}/prefetch_bulk", json=payload, params=params)
-                return True
+            await client.post(f"{API_URL}/prefetch_bulk", json=payload, params=params)
+            return True
         except Exception as e:
             logging.warning(f"Bulk prefetch failed: {e}")
         return False
@@ -536,13 +590,13 @@ class YouTubeAPI:
                 params["api_key"] = API_KEY
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             try:
-                async with httpx.AsyncClient(timeout=600.0) as client:
-                    async with client.stream("GET", f"{API_URL}/download", params=params) as resp:
-                        if resp.status_code != 200:
-                            return False
-                        with open(filepath, "wb") as f:
-                            async for chunk in resp.aiter_bytes(131072):
-                                f.write(chunk)
+                client = await self.get_client()
+                async with client.stream("GET", f"{API_URL}/download", params=params) as resp:
+                    if resp.status_code != 200:
+                        return False
+                    with open(filepath, "wb") as f:
+                        async for chunk in resp.aiter_bytes(131072):
+                            f.write(chunk)
                 return os.path.exists(filepath) and os.path.getsize(filepath) > 0
             except Exception as e:
                 logging.warning(f"API download failed for {vidid_extracted}: {e}")
@@ -551,13 +605,13 @@ class YouTubeAPI:
                     except Exception: pass
                 return False
 
-        # API-first Streaming Strategy (Works exactly like youtube.py)
+        # API-first Direct File Downloading System (Prevents NoAudioSourceFound)
         if API_URL:
             dl_type = "video" if (video or songvideo) else "audio"
-            link = clean_link(link)
-            vidid_extracted = extract_vidid(link)
+            link = self._clean_link(link)
+            vidid_extracted = extract_vidid(link) or link
+            ext = "mp4" if dl_type == "video" else "mp3"
 
-            # Local download required only for local song uploads (songvideo / songaudio)
             if songvideo:
                 fpath = f"downloads/{title}.mp4"
                 success = await download_from_api(link, "video", fpath)
@@ -569,19 +623,13 @@ class YouTubeAPI:
                 if success:
                     return fpath
             else:
-                # General audio / video play: return the direct stream URL from API!
-                if vidid_extracted:
-                    ext = "mp4" if dl_type == "video" else "mp3"
-                    # Background prefetch to warm cache
-                    asyncio.create_task(self.prefetch(link, video=bool(dl_type == "video")))
-                    if API_KEY:
-                        stream_url = f"{API_URL}/downloads/{API_KEY}/youtube.com/{vidid_extracted}.{ext}"
-                    else:
-                        stream_url = f"{API_URL}/downloads/youtube.com/{vidid_extracted}.{ext}"
-                else:
-                    stream_url = await download_assistant(link, dl_type)
-                
-                return stream_url, True
+                # Play download: Actually download locally (zero-latency, 100% stable, resolves NoAudioSourceFound)
+                fpath = f"downloads/{vidid_extracted}.{ext}"
+                # Background prefetch to warm cache
+                asyncio.create_task(self.prefetch(link, video=bool(dl_type == "video")))
+                success = await download_from_api(link, dl_type, fpath)
+                if success:
+                    return fpath, True
 
         # Local Fallbacks (user's original implementation)
         loop = asyncio.get_running_loop()
@@ -703,6 +751,10 @@ class YouTubeAPI:
             direct = True
             downloaded_file = await loop.run_in_executor(None, audio_dl)
             return downloaded_file, direct
+
+    async def close(self):
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
 
 
 YouTube = YouTubeAPI()
